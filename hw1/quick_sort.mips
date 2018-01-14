@@ -1,0 +1,273 @@
+.data
+	.align  5
+str20:
+	.ascii	"Initial array:\000"
+	.align	5
+str21:
+	.ascii	"Sorted array:\000"
+	.align	5
+str22:
+	.ascii	" ]\n\000"
+	.align	5
+str0:
+	.ascii	"Joe\000"
+	.align	5
+str1:
+	.ascii	"Jenny\000"
+	.align	5
+str2:
+	.ascii	"Jill\000"
+	.align	5
+str3:
+	.ascii	"John\000"
+	.align	5
+str4:
+	.ascii	"Jeff\000"
+	.align	5
+str5:
+	.ascii	"Joyce\000"
+	.align	5
+str6:
+	.ascii	"Jerry\000"
+	.align	5
+str7:
+	.ascii	"Janice\000"
+	.align	5
+str8:
+	.ascii	"Jake\000"
+	.align	5
+str9:
+	.ascii	"Jonna\000"
+	.align	5
+str10:
+	.ascii	"Jack\000"
+	.align	5
+str11:
+	.ascii	"Jocelyn\000"
+	.align	5
+str12:
+	.ascii	"Jessie\000"
+	.align	5
+str13:
+	.ascii	"Jess\000"
+	.align	5
+str14:
+	.ascii	"Janet\000"
+	.align	5
+str15:
+	.ascii	"Jane\000"
+	.data
+	.align	5
+arr:
+	.word	str0
+	.word	str1
+	.word	str2
+	.word	str3
+	.word	str4
+	.word	str5
+	.word	str6
+	.word	str7
+	.word	str8
+	.word	str9
+	.word	str10
+	.word	str11
+	.word	str12
+	.word	str13
+	.word	str14
+	.word	str15
+
+.text
+
+main:
+	#   int size = 16;
+	li $s1, 16
+	#   printf("Initial array:\n");
+	la $a0, str20
+	jal puts
+	#   print_array(data, size);
+	la $a0, arr
+	add $a1, $s1, $zero
+	jal print_array
+	
+	# test swap
+	la $a0, arr
+	addi $a1, $a0, 4
+	jal swap_str_ptrs
+	
+	# quisk_sort(data, size);
+	la $a0, arr
+	move $a1, $s1
+	jal quick_sort
+	
+	#  printf("Sorted array:\n");
+	#  print_array(data, size);
+	la $a0, str21
+	jal puts
+	la $a0, arr
+	add $a1, $s1, $zero
+	jal print_array
+	
+	# test str lt
+	la $t0, arr
+	lw $a0, ($t0)
+	jal puts
+	la $t0, arr
+	lw $a1, ($t0)
+	lw $a0, 4($t0)
+	jal str_lt
+	li $v0, 1
+	syscall
+
+	
+	#  return 0;
+	li $v0, 10
+	syscall
+
+puts:
+	#  printf("str")
+	li $v0, 4
+	syscall
+	jr $ra
+
+
+putchar:
+  #  printf('c')
+  li $v0, 11
+  syscall
+  jr $ra
+
+
+print_array:
+	# construct stack frame
+	addiu $sp, $sp, -16
+	sw $ra, 12($sp)
+	sw $s0, 8($sp)
+	sw $s1, 4($sp)
+	sw $s2, ($sp)
+	
+	add $s0, $a0, $zero
+	add $s1, $a1, $zero
+	#  printf("[");
+	li $a0, '['
+	jal putchar
+	#  for (int i = 0; i < size; i++) {
+	li $s2, 0
+Loop1:
+	li $a0, ' '
+	jal putchar
+	lw $a0, 0($s0)
+	jal puts
+	addi $s2, $s2, 1
+	addi $s0, $s0, 4
+	bne $s1, $s2, Loop1
+	
+	#  printf(" ]\n");
+	la $a0, str22
+	jal puts
+	
+	#  cleanup stack frame
+	lw $ra, 12($sp)
+	lw $s0, 8($sp)
+	lw $s1, 4($sp)
+	lw $s2, ($sp)
+	addiu $sp, $sp, 16
+	jr $ra
+
+# int str_lt (const char *x, const char *y) {
+str_lt:
+
+Loop2:
+	lb $t0, ($a0)
+	lb $t1, ($a1)
+	beq $t0, $zero, Loop_end
+	beq $t1, $zero, Loop_end
+	
+	sub $t0, $t0, $t1
+	bgtz $t0, rtn_0
+	bltz $t0, rtn_1
+	
+	addi $a0, $a0, 1
+	addi $a1, $a1, 1
+	j Loop2
+Loop_end:
+	lb $t1, 0($a1)
+	beq $t1, $zero, rtn_0
+rtn_1:
+	addi $a0, $zero, 1
+	j rtn
+rtn_0:
+	addi $a0, $zero, 0
+	j rtn
+rtn:
+	jr $ra
+
+swap_str_ptrs:
+	lw $t0, 0($a0)
+	lw $t1, 0($a1)
+	sw $t0, 0($a1)
+	sw $t1, 0($a0)
+	jr $ra
+	
+# void quick_sort(const char *a[], size_t len)
+quick_sort:
+	addiu $sp, $sp, -24
+	sw $ra, 20($sp)
+	sw $s4, 16($sp)
+	sw $s3, 12($sp)
+	sw $s2, 8($sp)
+	sw $s1, 4($sp)
+	sw $s0, 0($sp)
+	
+	#   if (len <= 1) {return;}
+	addiu $s2, $a1, -1  # size_t len-1
+	blez $s2, quick_sort_rtn
+	sll $t0, $s2, 2
+	move $s3, $a0  # char *[] a
+	add $s4, $s3, $t0 # char * a + len - 1
+	# int pivot = 0
+	li $s0, 0 # pivot
+	li $s1, 0 # int i = 0
+Loop3:
+	#   for (int i = 0; i < len - 1; i++) {
+	bge $s1, $s2, Loop3_end
+	#   if (str_lt(a[i], a[len - 1])) {
+	sll $t0, $s1, 2
+	add $a0, $s3, $t0  # a+i
+	move $a1, $s4  # a + len - 1
+	lw $a0, ($a0)
+	lw $a1, ($a1)
+	jal str_lt
+	beqz $a0, L1
+	sll $t0, $s1, 2
+	add $a0, $s3, $t0  # a+i
+	sll $t0, $s0, 2
+	add $a1, $s3, $t0 # a + pivot
+	jal swap_str_ptrs
+	addi $s0, $s0, 1 # pivot ++
+L1:
+	addi $s1, $s1, 1
+	j Loop3
+Loop3_end:
+	sll $t0, $s0, 2
+	add $a0, $s3, $t0  # a + pivot
+	move $a1, $s4  # a + len - 1
+	jal swap_str_ptrs
+	
+	move $a0, $s3
+	move $a1, $s0
+	jal quick_sort
+	addi $t0, $s0, 1
+	sll $t0, $t0, 2
+	add $a0, $s3, $t0  # a + pivot + 1
+	sub $a1, $s2, $s0  # len - 1 - pivot
+	jal quick_sort
+	
+quick_sort_rtn:
+	lw $ra, 20($sp)
+	lw $s4, 16($sp)
+	lw $s3, 12($sp)
+	lw $s2, 8($sp)
+	lw $s1, 4($sp)
+	lw $s0, 0($sp)
+	addiu $sp, $sp, 24
+	jr $ra
