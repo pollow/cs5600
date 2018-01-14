@@ -1,10 +1,10 @@
 .data
 	.align  5
 str20:
-	.ascii	"Initial array:\000"
+	.ascii	"Initial array:\n\000"
 	.align	5
 str21:
-	.ascii	"Sorted array:\000"
+	.ascii	"Sorted array:\n\000"
 	.align	5
 str22:
 	.ascii	" ]\n\000"
@@ -89,11 +89,6 @@ main:
 	add $a1, $s1, $zero
 	jal print_array
 	
-	# test swap
-	la $a0, arr
-	addi $a1, $a0, 4
-	jal swap_str_ptrs
-	
 	# quisk_sort(data, size);
 	la $a0, arr
 	move $a1, $s1
@@ -106,18 +101,6 @@ main:
 	la $a0, arr
 	add $a1, $s1, $zero
 	jal print_array
-	
-	# test str lt
-	la $t0, arr
-	lw $a0, ($t0)
-	jal puts
-	la $t0, arr
-	lw $a1, ($t0)
-	lw $a0, 4($t0)
-	jal str_lt
-	li $v0, 1
-	syscall
-
 	
 	#  return 0;
 	li $v0, 10
@@ -153,6 +136,7 @@ print_array:
 	#  for (int i = 0; i < size; i++) {
 	li $s2, 0
 Loop1:
+	#    printf(" %s", a[i]);
 	li $a0, ' '
 	jal putchar
 	lw $a0, 0($s0)
@@ -175,7 +159,7 @@ Loop1:
 
 # int str_lt (const char *x, const char *y) {
 str_lt:
-
+	#  for (; *x!='\0' && *y!='\0'; x++, y++) {
 Loop2:
 	lb $t0, ($a0)
 	lb $t1, ($a1)
@@ -183,19 +167,25 @@ Loop2:
 	beq $t1, $zero, Loop_end
 	
 	sub $t0, $t0, $t1
+	#       if ( *x - *y > 0 ) return 0;
 	bgtz $t0, rtn_0
+	#       if ( *x - *y < 0 ) return 1;
 	bltz $t0, rtn_1
 	
 	addi $a0, $a0, 1
 	addi $a1, $a1, 1
 	j Loop2
 Loop_end:
+	#   if ( *y == '\0' ) return 0;
+	#   else return 1;
 	lb $t1, 0($a1)
 	beq $t1, $zero, rtn_0
 rtn_1:
+	# return 1
 	addi $a0, $zero, 1
 	j rtn
 rtn_0:
+	# return 0
 	addi $a0, $zero, 0
 	j rtn
 rtn:
@@ -238,24 +228,28 @@ Loop3:
 	lw $a1, ($a1)
 	jal str_lt
 	beqz $a0, L1
+	#  swap_str_ptrs(&a[i], &a[pivot]);
 	sll $t0, $s1, 2
 	add $a0, $s3, $t0  # a+i
 	sll $t0, $s0, 2
 	add $a1, $s3, $t0 # a + pivot
 	jal swap_str_ptrs
-	addi $s0, $s0, 1 # pivot ++
+	#  pivot ++
+	addi $s0, $s0, 1 
 L1:
-	addi $s1, $s1, 1
+	addi $s1, $s1, 1  # i++
 	j Loop3
 Loop3_end:
+	#  swap_str_ptrs(&a[pivot], &a[len - 1]);
 	sll $t0, $s0, 2
 	add $a0, $s3, $t0  # a + pivot
 	move $a1, $s4  # a + len - 1
 	jal swap_str_ptrs
-	
+	#  quick_sort(a, pivot);
 	move $a0, $s3
 	move $a1, $s0
 	jal quick_sort
+	#  quick_sort(a + pivot + 1, len - pivot - 1);
 	addi $t0, $s0, 1
 	sll $t0, $t0, 2
 	add $a0, $s3, $t0  # a + pivot + 1
