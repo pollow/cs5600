@@ -1,0 +1,7 @@
+# Homework 1
+
+## Execution
+
+This homework submission contains only one asm file named `quick_sort.mips`. Open this file in Mars 4.5 MIPS simulator, assembly (Press F3) and execute.
+
+The buttom window *Run I/O* will print the initial array and sorted array.
