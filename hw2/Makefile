@@ -8,8 +8,8 @@ ckpt: ckpt.c ckpt.h
 	cc ckpt.c -c -o libckpt.o $(FLAGS)
 	ar rcs libckpt.a libckpt.o
 
-hello: hello.c ckpt
-	cc hello.c -L. -lckpt -o hello $(FLAGS)
+hello: hello.c
+	cc hello.c -o hello $(FLAGS)
 
 res: myrestart.c ckpt
 	cc myrestart.c -L. -lckpt -static -Wl,-Ttext-segment=5000000 -Wl,-Tdata=5100000 -Wl,-Tbss=5200000 -o myrestart $(FLAGS)
@@ -24,4 +24,4 @@ gdb: res
 	gdb --args myrestart myckpt
 
 clean:
-	rm -f myckpt
+	rm -f myckpt hello myrestart libckpt.*
