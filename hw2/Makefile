@@ -1,18 +1,27 @@
 CC=gcc
+FLAGS=-g -fno-stack-check -fstack-protector-explicit -fno-stack-protector
 
 all: hello res clean
 
-hello: hello.c
-	cc hello.c -o hello -g -fno-stack-check -fstack-protector-explicit -fno-stack-protector
+ckpt: ckpt.c ckpt.h
+	cc ckpt.c -fPIC -shared -o libckpt.so $(FLAGS)
+	cc ckpt.c -c -o libckpt.o $(FLAGS)
+	ar rcs libckpt.a libckpt.o
 
-res: myrestart.c
-	cc -static -Wl,-Ttext-segment=5000000 -Wl,-Tdata=5100000 -Wl,-Tbss=5200000 myrestart.c -g -o myrestart -fno-stack-check -fstack-protector-explicit -fno-stack-protector
+hello: hello.c ckpt
+	cc hello.c -L. -lckpt -o hello $(FLAGS)
 
-test: hello res
+res: myrestart.c ckpt
+	cc myrestart.c -L. -lckpt -static -Wl,-Ttext-segment=5000000 -Wl,-Tdata=5100000 -Wl,-Tbss=5200000 -o myrestart $(FLAGS)
+
+restart: hello res
 	./myrestart myckpt
+
+check: hello res clean
+	(sleep 3 && kill -12 `pgrep -n hello` && sleep 2 && make restart) & ./hello & (sleep 10 && kill -9 `pgrep -n myrestart`)
 
 gdb: res
 	gdb --args myrestart myckpt
 
 clean:
-	rm myckpt
+	rm -f myckpt
