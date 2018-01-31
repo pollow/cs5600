@@ -210,6 +210,5 @@ void sighandler(int signum) {
 
 __attribute__ ((constructor))
 void init() {
-    printf("Blah!\n");
     signal(SIGUSR2, sighandler);
 }
