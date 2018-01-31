@@ -18,7 +18,7 @@ restart: hello res
 	./myrestart myckpt
 
 check: hello res clean
-	(sleep 3 && kill -12 `pgrep -n hello` && sleep 2 && make restart) & ./hello & (sleep 10 && kill -9 `pgrep -n myrestart`)
+	(sleep 3 && kill -12 `pgrep -n hello` && sleep 2 && make restart) & LD_PRELOAD=./libckpt.so ./hello & (sleep 10 && kill -9 `pgrep -n myrestart`)
 
 gdb: res
 	gdb --args myrestart myckpt
