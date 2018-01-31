@@ -1,9 +1,9 @@
 #include "ckpt.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <ucontext.h>
+#include <signal.h>
 #include <string.h>
 #include <ctype.h>
 #include <assert.h>
@@ -199,4 +199,17 @@ void restore(char* filename) {
 
     asm volatile ("mov %0,%%rsp" : : "g" (stack_ptr) : "memory");
     _restore(_filename);
+}
+
+void sighandler(int signum) {
+    if (signum != SIGUSR2) {
+        return;
+    }
+    checkpoint();
+}
+
+__attribute__ ((constructor))
+void init() {
+    printf("Blah!\n");
+    signal(SIGUSR2, sighandler);
 }
