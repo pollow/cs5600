@@ -1,5 +1,6 @@
 CC=gcc
 FLAGS=-g -fno-stack-check -fno-stack-protector -std=gnu11
+PWD=$(shell pwd)
 
 all: hello res clean
 
@@ -17,8 +18,8 @@ res: myrestart.c ckpt
 restart: hello res
 	./myrestart myckpt
 
-check: hello res clean
-	(sleep 3 && kill -12 `pgrep -n hello` && sleep 2 && make restart) & LD_PRELOAD=./libckpt.so ./hello & (sleep 10 && kill -9 `pgrep -n myrestart`)
+check: clean hello res ckpt
+	(sleep 3 && kill -12 `pgrep -n hello` && sleep 2 && make restart) & LD_PRELOAD=$(PWD)/libckpt.so ./hello & (sleep 10 && kill -9 `pgrep -n myrestart`)
 
 gdb: res
 	gdb --args myrestart myckpt
