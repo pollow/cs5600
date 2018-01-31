@@ -1,5 +1,5 @@
 CC=gcc
-FLAGS=-g -fno-stack-check -fstack-protector-explicit -fno-stack-protector
+FLAGS=-g -fno-stack-check -fno-stack-protector -std=gnu11
 
 all: hello res clean
 
