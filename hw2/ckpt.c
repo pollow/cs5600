@@ -120,10 +120,8 @@ void checkpoint() {
         write(fd, "000000000\n", sizeof(char)*10);
         int wl = write(fd, &context, sizeof(context));
         close(fd);
-        exit(0);
     } else {
         // restore
-        return;
     }
 }
 
