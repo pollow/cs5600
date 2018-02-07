@@ -1,6 +1,6 @@
 #Sample Makefile for Malloc
 CC=gcc
-CFLAGS=-g -O0 -fPIC -Werror -Wall
+CFLAGS=-g -O0 -fPIC -Wall
 
 TESTS=t-test1 test1
 HEADERS= malloc.h #Add list of header files

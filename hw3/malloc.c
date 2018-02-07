@@ -60,7 +60,7 @@ void _validate() {
 }
 
 int valid_align(size_t x) {
-    if (x && (x & (x-1))) {
+    if (x && (x & (x-1)) == 0) {
         return x;
     } else return 0;
 }
@@ -284,11 +284,10 @@ void free(void *ptr) {
 
 
 void *realloc(void *ptr, size_t size) {
-    pthread_mutex_lock(&malloc_lock);
-
     if (ptr == NULL) {
         return malloc(size);
     }
+
     unsigned char *p = ptr;
     size_t page_num = (p - mem_zone.mem_base) / PAGE_SIZE;
     struct page_info *pi =  page_num + mem_zone.page_info_base;
@@ -300,10 +299,9 @@ void *realloc(void *ptr, size_t size) {
 
     unsigned char *rtn = (unsigned char *)malloc(size);
     memcpy(rtn, ptr, mem_size);
+
     free(ptr);
     return rtn;
-
-    pthread_mutex_unlock(&malloc_lock);
 }
 
 void *reallocarray(void *ptr, size_t nmemb, size_t size) {
@@ -327,7 +325,7 @@ void *memalign(size_t align, size_t size) {
     void *rtn = NULL;
     if (align && size) {
         size_t extra = sizeof(void *) + (align - 1);
-        void *p= malloc(size + extra);
+        void *p = malloc(size + extra);
 
         if (p) {
             if (((size_t)p & (align - 1)) == 0) {
@@ -339,11 +337,19 @@ void *memalign(size_t align, size_t size) {
             *((void **)rtn - 1) = p;
             // flag page_info
             size_t page_num = ((unsigned char *)rtn - mem_zone.mem_base) / PAGE_SIZE;
-            struct page_info *pi =  page_num + mem_zone.page_info_base;
+            struct page_info *pi = page_num + mem_zone.page_info_base;
             pi->flags |= ADDR_MEMALIGN;
         }
     }
-
     return rtn;
+}
 
+int posix_memalign(void **memptr, size_t alignment, size_t size) {
+    void *rtn = memalign(alignment, size);
+    if (rtn == NULL) {
+        return 1;
+    } else {
+        *memptr = rtn;
+        return 0;
+    }
 }
