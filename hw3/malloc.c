@@ -285,6 +285,10 @@ void free(void *ptr) {
 
 void *realloc(void *ptr, size_t size) {
     pthread_mutex_lock(&malloc_lock);
+
+    if (ptr == NULL) {
+        return malloc(size);
+    }
     unsigned char *p = ptr;
     size_t page_num = (p - mem_zone.mem_base) / PAGE_SIZE;
     struct page_info *pi =  page_num + mem_zone.page_info_base;
