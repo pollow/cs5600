@@ -281,10 +281,9 @@ static void bin_alloc(struct bin *m, size_t size, unsigned r)
 		/* memalign */
 		if (m->size > 0) free(m->ptr);
 		m->ptr = memalign(sizeof(int) << r, size);
-	}
-	else if (r < 20)
-	{
-		/* calloc */
+	} else if (r < 20)
+  {
+    /* calloc */
 		if (m->size > 0) free(m->ptr);
 		m->ptr = calloc(size, 1);
 #if TEST > 0

@@ -11,12 +11,16 @@
 #include "malloc.h"
 
 #define MAX_ORDER 16
+#define HEAD_OFFSET sizeof(page_info)
+#define GET_INFO(x) (page_info *)((u8ptr_t)(x) - HEAD_OFFSET);
+
 static size_t PAGE_SIZE;
 static size_t BLOCK_SIZE;  // 2^0 takes a page, typically 2^12 = 4096;
 pthread_mutex_t malloc_lock;
 
-// Address status mask
+typedef unsigned char * u8ptr_t;
 
+// Address status mask
 const size_t ADDR_ALLOCATED = 0x1;
 const size_t ADDR_MEMALIGN = 0x2;
 
@@ -26,7 +30,7 @@ typedef struct free_area {
 } free_area;
 
 typedef struct mem_arena {
-    unsigned char *mem_base;
+    u8ptr_t mem_base;
     struct page_info* page_info_base;
     struct free_area free_area[MAX_ORDER + 1];
 } mem_arena;
@@ -41,7 +45,7 @@ typedef struct page_info {
 } page_info;
 
 void *_memset(void* ptr, int c, size_t len) {
-    unsigned char *p = ptr;
+    u8ptr_t p = (u8ptr_t)ptr;
     while (len--) {
         *p++ = (unsigned char)c;
     }
@@ -74,17 +78,16 @@ void init() {
     PAGE_SIZE = sysconf(_SC_PAGESIZE);
     BLOCK_SIZE = PAGE_SIZE;
     char buf[1024];
-    mem_zone.free_area[MAX_ORDER].ptr =
-        mem_zone.page_info_base = sbrk(sizeof(page_info) << MAX_ORDER);
     void *cur = sbrk(0);
     mem_zone.mem_base = sbrk(BLOCK_SIZE << MAX_ORDER);
+    mem_zone.free_area[MAX_ORDER].ptr = (page_info *)cur;
 
     snprintf(buf, 1024, "User space memory %p:%p\n", cur, sbrk(0));
     write(STDOUT_FILENO, buf, strlen(buf));
 
-    _memset(mem_zone.page_info_base, 0, sizeof(page_info));
-    mem_zone.page_info_base->order = MAX_ORDER;
+    _memset(cur, 0, sizeof(page_info));
     mem_zone.free_area[MAX_ORDER].count = 1;
+    mem_zone.free_area[MAX_ORDER].ptr->order= MAX_ORDER;
 
     // initalize mutex
     int rtn = pthread_mutex_init(&malloc_lock, NULL);
@@ -151,7 +154,7 @@ void _split(size_t order) {
         _unlink(left);
         assert(fa->count == tmp - 1);
         left->order--;
-        page_info *right = left + (1 << (order - 1));
+        page_info *right = left + ((BLOCK_SIZE / HEAD_OFFSET) << left->order);
         right->order = order - 1;
         assert(left->order == right->order);
         tmp = mem_zone.free_area[left->order].count;
@@ -192,8 +195,7 @@ void *malloc(size_t size) {
     }
 
     rtnptr->flags |= ADDR_ALLOCATED;
-    void *rtn = (rtnptr - mem_zone.page_info_base) *
-        PAGE_SIZE + (unsigned char *)mem_zone.mem_base;
+    void *rtn = (u8ptr_t)rtnptr + sizeof(page_info);
     // We can't use printf here because printf internally calls `malloc` and thus
     // we'll get into an infinite recursion leading to a segfault.
     // Instead, we first write the message into a string and then use the `write`
@@ -203,7 +205,7 @@ void *malloc(size_t size) {
              __FILE__, __LINE__, size, alloc_size, rtn);
     // write(STDOUT_FILENO, buf, strlen(buf));
 
-    // _validate();
+    _validate();
     pthread_mutex_unlock(&malloc_lock);
     return rtn;
 }
@@ -214,21 +216,22 @@ void *calloc(size_t nmemb, size_t size) {
     return ptr;
 }
 
-void _try_merge(size_t page_num);
-void _merge_buddy(size_t a, size_t b) {
-    assert(a < b);
-    page_info *left = mem_zone.page_info_base + a;
-    page_info *right = mem_zone.page_info_base + b;
+void _try_merge(page_info *pi);
+void _merge_buddy(page_info *left, page_info *right) {
+    assert(left < right);
     _memset(right, 0, sizeof(page_info));
     left->order++;
     _insert(left);
-    _try_merge(a);
+    _try_merge(left);
 }
 
-void _try_merge(size_t page_num) {
-    page_info *pi =  page_num + mem_zone.page_info_base;
-    page_info *buddy = mem_zone.page_info_base +
-        (page_num ^ (1 << pi->order));
+page_info *_get_buddy(u8ptr_t pi, size_t order) {
+    return (page_info *)(mem_zone.mem_base +
+                         ((size_t)(pi-mem_zone.mem_base) ^ (BLOCK_SIZE << order)));
+}
+
+void _try_merge(page_info *pi) {
+    page_info *buddy = _get_buddy((u8ptr_t)pi, pi->order);
 
     if (pi->order != MAX_ORDER &&
         buddy->order == pi->order &&
@@ -238,8 +241,8 @@ void _try_merge(size_t page_num) {
         _unlink(pi);
         _unlink(buddy);
         assert(mem_zone.free_area[pi->order].count == tfa.count-2);
-        _merge_buddy(page_num & ~(1 << pi->order),
-                     page_num | (1 << pi->order));
+        _merge_buddy(pi < buddy ? pi : buddy,
+                     pi < buddy ? buddy : pi);
     }
 }
 
@@ -247,9 +250,15 @@ void free(void *ptr) {
     if (ptr == NULL)
         return;
     pthread_mutex_lock(&malloc_lock);
-    unsigned char *p = ptr;
-    size_t page_num = (p - mem_zone.mem_base) / PAGE_SIZE;
-    page_info *pi =  page_num + mem_zone.page_info_base;
+    // if returned by memalign
+
+    page_info *pi = GET_INFO(ptr);
+
+    if (pi->flags & ADDR_MEMALIGN) {
+        size_t hdr = sizeof(u8ptr_t) + sizeof(page_info);
+        ptr = *((void **)ptr - hdr/sizeof(u8ptr_t));
+        pi = GET_INFO(ptr);
+    }
 
     // We can't use printf here because printf internally calls `malloc` and thus
     // we'll get into an infinite recursion leading to a segfault.
@@ -260,18 +269,12 @@ void free(void *ptr) {
              __FILE__, __LINE__, ptr, (1 << pi->order) * PAGE_SIZE, ptr);
     // write(STDOUT_FILENO, buf, strlen(buf));
 
-    // if returned by memalign
-    if (pi->flags | ADDR_MEMALIGN) {
-        ptr = *((void **)ptr - 1);
-        pi->flags -= ADDR_MEMALIGN;
-    }
-
     free_area tfa = mem_zone.free_area[pi->order];
     _insert(pi);
     assert(tfa.count + 1 == mem_zone.free_area[pi->order].count);
     assert(pi == mem_zone.free_area[pi->order].ptr);
-    pi->flags -= ADDR_ALLOCATED;
-    _try_merge(page_num);
+    pi->flags = 0;
+    _try_merge(pi);
     _validate();
     pthread_mutex_unlock(&malloc_lock);
 }
@@ -282,10 +285,8 @@ void *realloc(void *ptr, size_t size) {
         return malloc(size);
     }
 
-    unsigned char *p = ptr;
-    size_t page_num = (p - mem_zone.mem_base) / PAGE_SIZE;
-    page_info *pi =  page_num + mem_zone.page_info_base;
-    size_t mem_size = (1 << pi->order) * PAGE_SIZE;
+    page_info *pi = GET_INFO(ptr);
+    size_t mem_size = (1 << pi->order) * PAGE_SIZE - HEAD_OFFSET;
 
     if (size < mem_size) {
         // already larger than requested size.
@@ -294,8 +295,8 @@ void *realloc(void *ptr, size_t size) {
 
     unsigned char *rtn = (unsigned char *)malloc(size);
     memcpy(rtn, ptr, mem_size);
-
     free(ptr);
+
     return rtn;
 }
 
@@ -313,14 +314,11 @@ void *memalign(size_t align, size_t size) {
         return NULL;
     }
     assert((align & (align - 1)) == 0);
-    if (align <= BLOCK_SIZE) {
-        // buddy system will always align to page_size;
-        return malloc(size);
-    }
 
     void *rtn = NULL;
     if (align && size) {
-        size_t extra = sizeof(void *) + (align - 1);
+        size_t hdr = sizeof(u8ptr_t) + sizeof(page_info);
+        size_t extra = (align - 1) + hdr;
         void *p = malloc(size + extra);
 
         if (p) {
@@ -328,12 +326,11 @@ void *memalign(size_t align, size_t size) {
                 // already aligned.
                 return p;
             }
-            // align up and store start pointer
-            rtn = _align_up((unsigned char *)p + sizeof(void *), align);
-            *((void **)rtn - 1) = p;
+            // align up and store start pointer, store a new page_info
+            rtn = _align_up((u8ptr_t)p + hdr, align);
+            *((void **)rtn - hdr/sizeof(u8ptr_t)) = p;
             // flag page_info
-            size_t page_num = ((unsigned char *)rtn - mem_zone.mem_base) / PAGE_SIZE;
-            page_info *pi = page_num + mem_zone.page_info_base;
+            page_info *pi = GET_INFO(rtn);
             pi->flags |= ADDR_MEMALIGN;
         }
     }
