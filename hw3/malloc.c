@@ -9,7 +9,6 @@
 
 #include "malloc.h"
 
-// 2^10 at most 4M
 #define MAX_ORDER 16
 static size_t PAGE_SIZE;
 static size_t BLOCK_SIZE;  // 2^0 takes a page, typically 2^12 = 4096;
@@ -17,6 +16,7 @@ pthread_mutex_t malloc_lock;
 
 // Address status mask
 const size_t ADDR_ALLOCATED = 0x1;
+const size_t ADDR_MEMALIGN = 0x2;
 
 struct free_area {
     struct page_info *ptr; // last 12 bits are free for mark
@@ -160,7 +160,7 @@ void _split(size_t order) {
     }
 }
 
-void *malloc(size_t alignment, size_t size) {
+void *malloc(size_t size) {
     pthread_mutex_lock(&malloc_lock);
     if (size == 2605) {
         size++;
@@ -266,6 +266,12 @@ void free(void *ptr) {
              __FILE__, __LINE__, ptr, (1 << pi->order) * PAGE_SIZE, ptr);
     // write(STDOUT_FILENO, buf, strlen(buf));
 
+    // if returned by memalign
+    if (pi->flags | ADDR_MEMALIGN) {
+        ptr = *((void **)ptr - 1);
+        pi->flags -= ADDR_MEMALIGN;
+    }
+
     struct free_area tfa = mem_zone.free_area[pi->order];
     _insert(pi);
     assert(tfa.count + 1 == mem_zone.free_area[pi->order].count);
@@ -300,8 +306,40 @@ void *reallocarray(void *ptr, size_t nmemb, size_t size) {
     return realloc(ptr, nmemb * size);
 }
 
-void *memalign(size_t alignment, size_t size) {
-    if (valid_align(alignment)) {
-        
+void *_align_up(unsigned char *p, size_t align) {
+    return (void *)(((size_t)p + (align - 1)) & ~(align - 1));
+}
+
+void *memalign(size_t align, size_t size) {
+    if (!valid_align(align)) {
+        return NULL;
     }
+    assert((align & (align - 1)) == 0);
+    if (align <= BLOCK_SIZE) {
+        // buddy system will always align to page_size;
+        return malloc(size);
+    }
+
+    void *rtn = NULL;
+    if (align && size) {
+        size_t extra = sizeof(void *) + (align - 1);
+        void *p= malloc(size + extra);
+
+        if (p) {
+            if (((size_t)p & (align - 1)) == 0) {
+                // already aligned.
+                return p;
+            }
+            // align up and store start pointer
+            rtn = _align_up(p + sizeof(void *), align);
+            *((void **)rtn - 1) = p;
+            // flag page_info
+            size_t page_num = ((unsigned char *)rtn - mem_zone.mem_base) / PAGE_SIZE;
+            struct page_info *pi =  page_num + mem_zone.page_info_base;
+            pi->flags |= ADDR_MEMALIGN;
+        }
+    }
+
+    return rtn;
+
 }
