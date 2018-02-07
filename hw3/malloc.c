@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <assert.h>
+#include <errno.h>
 
 #include "malloc.h"
 
@@ -59,7 +60,7 @@ void _validate() {
     }
 }
 
-int valid_align(size_t x) {
+int _valid_align(size_t x) {
     if (x && (x & (x-1)) == 0) {
         return x;
     } else return 0;
@@ -113,10 +114,10 @@ void _unlink(struct page_info *pi) {
         pi->next->prev = pi->prev;
     }
     mem_zone.free_area[pi->order].count--;
-    struct free_area *fa = &mem_zone.free_area[pi->order];
-    if (fa->count != 0 && fa->ptr == NULL) {
-        write(1, "WTF???\n", 7);
-    }
+    // struct free_area *fa = &mem_zone.free_area[pi->order];
+    // if (fa->count != 0 && fa->ptr == NULL) {
+    //     write(1, "WTF???\n", 7);
+    // }
 }
 
 void _insert(struct page_info *left) {
@@ -162,11 +163,7 @@ void _split(size_t order) {
 
 void *malloc(size_t size) {
     pthread_mutex_lock(&malloc_lock);
-    if (size == 2605) {
-        size++;
-    }
     if (size == 0) {
-        // set errno
         return NULL;
     }
     size_t alloc_size = _round(size);
@@ -179,9 +176,8 @@ void *malloc(size_t size) {
     }
 
     if (!fa->count) {
-        rtnptr = NULL;
+        errno = ENOMEM;
         return NULL;
-        // set errno
     } else {
         if (fa->ptr == NULL) {
             const char *info = "Assertion fail.\n";
@@ -190,8 +186,6 @@ void *malloc(size_t size) {
         }
         rtnptr = fa->ptr;
         _unlink(fa->ptr);
-        // fa->count--;
-        // fa->ptr = fa->ptr->next;
     }
 
     rtnptr->flags |= ADDR_ALLOCATED;
@@ -206,10 +200,7 @@ void *malloc(size_t size) {
              __FILE__, __LINE__, size, alloc_size, rtn);
     // write(STDOUT_FILENO, buf, strlen(buf));
 
-    _validate();
-    if ((size_t)rtn > 0x10804000) {
-        write(1, "FUCK???\n", 8);
-    }
+    // _validate();
     pthread_mutex_unlock(&malloc_lock);
     return rtn;
 }
@@ -294,6 +285,7 @@ void *realloc(void *ptr, size_t size) {
     size_t mem_size = (1 << pi->order) * PAGE_SIZE;
 
     if (size < mem_size) {
+        // already larger than requested size.
         return ptr;
     }
 
@@ -313,7 +305,8 @@ void *_align_up(unsigned char *p, size_t align) {
 }
 
 void *memalign(size_t align, size_t size) {
-    if (!valid_align(align)) {
+    if (!_valid_align(align)) {
+        errno = EINVAL;
         return NULL;
     }
     assert((align & (align - 1)) == 0);
@@ -333,7 +326,7 @@ void *memalign(size_t align, size_t size) {
                 return p;
             }
             // align up and store start pointer
-            rtn = _align_up(p + sizeof(void *), align);
+            rtn = _align_up((unsigned char *)p + sizeof(void *), align);
             *((void **)rtn - 1) = p;
             // flag page_info
             size_t page_num = ((unsigned char *)rtn - mem_zone.mem_base) / PAGE_SIZE;
@@ -347,7 +340,7 @@ void *memalign(size_t align, size_t size) {
 int posix_memalign(void **memptr, size_t alignment, size_t size) {
     void *rtn = memalign(alignment, size);
     if (rtn == NULL) {
-        return 1;
+        return errno;
     } else {
         *memptr = rtn;
         return 0;
