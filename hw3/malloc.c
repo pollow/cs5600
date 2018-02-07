@@ -16,26 +16,29 @@ static size_t BLOCK_SIZE;  // 2^0 takes a page, typically 2^12 = 4096;
 pthread_mutex_t malloc_lock;
 
 // Address status mask
+
 const size_t ADDR_ALLOCATED = 0x1;
 const size_t ADDR_MEMALIGN = 0x2;
 
-struct free_area {
+typedef struct free_area {
     struct page_info *ptr; // last 12 bits are free for mark
     int count;
-};
+} free_area;
 
-struct mem_zone {
+typedef struct mem_arena {
     unsigned char *mem_base;
     struct page_info* page_info_base;
     struct free_area free_area[MAX_ORDER + 1];
-} mem_zone;
+} mem_arena;
 
-struct page_info {
+mem_arena mem_zone;
+
+typedef struct page_info {
     struct page_info *next;
     struct page_info *prev;
     int order;
     size_t flags;
-};
+} page_info;
 
 void *_memset(void* ptr, int c, size_t len) {
     unsigned char *p = ptr;
@@ -47,9 +50,9 @@ void *_memset(void* ptr, int c, size_t len) {
 
 void _validate() {
     for (int i = 0; i < MAX_ORDER; i++) {
-        struct free_area *fa = &mem_zone.free_area[i];
+        free_area *fa = &mem_zone.free_area[i];
         int len = 0;
-        struct page_info *pi = fa->ptr;
+        page_info *pi = fa->ptr;
         while (pi) {
             len++;
             pi = pi->next;
@@ -72,14 +75,14 @@ void init() {
     BLOCK_SIZE = PAGE_SIZE;
     char buf[1024];
     mem_zone.free_area[MAX_ORDER].ptr =
-        mem_zone.page_info_base = sbrk(sizeof(struct page_info) << MAX_ORDER);
+        mem_zone.page_info_base = sbrk(sizeof(page_info) << MAX_ORDER);
     void *cur = sbrk(0);
     mem_zone.mem_base = sbrk(BLOCK_SIZE << MAX_ORDER);
 
     snprintf(buf, 1024, "User space memory %p:%p\n", cur, sbrk(0));
     write(STDOUT_FILENO, buf, strlen(buf));
 
-    _memset(mem_zone.page_info_base, 0, sizeof(struct page_info));
+    _memset(mem_zone.page_info_base, 0, sizeof(page_info));
     mem_zone.page_info_base->order = MAX_ORDER;
     mem_zone.free_area[MAX_ORDER].count = 1;
 
@@ -104,7 +107,7 @@ size_t _round(size_t size) {
     return size;
 }
 
-void _unlink(struct page_info *pi) {
+void _unlink(page_info *pi) {
     if (pi->prev != NULL) {
         pi->prev->next = pi->next;
     } else {
@@ -120,8 +123,8 @@ void _unlink(struct page_info *pi) {
     // }
 }
 
-void _insert(struct page_info *left) {
-    struct free_area *fa = &mem_zone.free_area[left->order];
+void _insert(page_info *left) {
+    free_area *fa = &mem_zone.free_area[left->order];
     left->prev = NULL;
     left->next = fa->ptr;
     if (left->next != NULL) {
@@ -132,7 +135,7 @@ void _insert(struct page_info *left) {
 }
 
 void _split(size_t order) {
-    struct free_area *fa = &mem_zone.free_area[order];
+    free_area *fa = &mem_zone.free_area[order];
 
     if (order > MAX_ORDER) {
         return;
@@ -144,11 +147,11 @@ void _split(size_t order) {
 
     if (fa->count) {
         int tmp = fa->count;
-        struct page_info *left = fa->ptr;
+        page_info *left = fa->ptr;
         _unlink(left);
         assert(fa->count == tmp - 1);
         left->order--;
-        struct page_info *right = left + (1 << (order - 1));
+        page_info *right = left + (1 << (order - 1));
         right->order = order - 1;
         assert(left->order == right->order);
         tmp = mem_zone.free_area[left->order].count;
@@ -166,10 +169,10 @@ void *malloc(size_t size) {
     if (size == 0) {
         return NULL;
     }
-    size_t alloc_size = _round(size);
+    size_t alloc_size = _round(size + sizeof(page_info));
     int order = __builtin_ctz(alloc_size) - 12; // 0x1000 -> order 0
-    struct page_info *rtnptr = NULL;
-    struct free_area *fa = &mem_zone.free_area[order];
+    page_info *rtnptr = NULL;
+    free_area *fa = &mem_zone.free_area[order];
 
     if (!fa->count) {
         _split(order+1);
@@ -214,24 +217,24 @@ void *calloc(size_t nmemb, size_t size) {
 void _try_merge(size_t page_num);
 void _merge_buddy(size_t a, size_t b) {
     assert(a < b);
-    struct page_info *left = mem_zone.page_info_base + a;
-    struct page_info *right = mem_zone.page_info_base + b;
-    _memset(right, 0, sizeof(struct page_info));
+    page_info *left = mem_zone.page_info_base + a;
+    page_info *right = mem_zone.page_info_base + b;
+    _memset(right, 0, sizeof(page_info));
     left->order++;
     _insert(left);
     _try_merge(a);
 }
 
 void _try_merge(size_t page_num) {
-    struct page_info *pi =  page_num + mem_zone.page_info_base;
-    struct page_info *buddy = mem_zone.page_info_base +
+    page_info *pi =  page_num + mem_zone.page_info_base;
+    page_info *buddy = mem_zone.page_info_base +
         (page_num ^ (1 << pi->order));
 
     if (pi->order != MAX_ORDER &&
         buddy->order == pi->order &&
         (buddy->flags & ADDR_ALLOCATED) == 0) {
         // same order, buddy not allocated, merge
-        struct free_area tfa = mem_zone.free_area[pi->order];
+        free_area tfa = mem_zone.free_area[pi->order];
         _unlink(pi);
         _unlink(buddy);
         assert(mem_zone.free_area[pi->order].count == tfa.count-2);
@@ -246,7 +249,7 @@ void free(void *ptr) {
     pthread_mutex_lock(&malloc_lock);
     unsigned char *p = ptr;
     size_t page_num = (p - mem_zone.mem_base) / PAGE_SIZE;
-    struct page_info *pi =  page_num + mem_zone.page_info_base;
+    page_info *pi =  page_num + mem_zone.page_info_base;
 
     // We can't use printf here because printf internally calls `malloc` and thus
     // we'll get into an infinite recursion leading to a segfault.
@@ -263,7 +266,7 @@ void free(void *ptr) {
         pi->flags -= ADDR_MEMALIGN;
     }
 
-    struct free_area tfa = mem_zone.free_area[pi->order];
+    free_area tfa = mem_zone.free_area[pi->order];
     _insert(pi);
     assert(tfa.count + 1 == mem_zone.free_area[pi->order].count);
     assert(pi == mem_zone.free_area[pi->order].ptr);
@@ -281,7 +284,7 @@ void *realloc(void *ptr, size_t size) {
 
     unsigned char *p = ptr;
     size_t page_num = (p - mem_zone.mem_base) / PAGE_SIZE;
-    struct page_info *pi =  page_num + mem_zone.page_info_base;
+    page_info *pi =  page_num + mem_zone.page_info_base;
     size_t mem_size = (1 << pi->order) * PAGE_SIZE;
 
     if (size < mem_size) {
@@ -330,7 +333,7 @@ void *memalign(size_t align, size_t size) {
             *((void **)rtn - 1) = p;
             // flag page_info
             size_t page_num = ((unsigned char *)rtn - mem_zone.mem_base) / PAGE_SIZE;
-            struct page_info *pi = page_num + mem_zone.page_info_base;
+            page_info *pi = page_num + mem_zone.page_info_base;
             pi->flags |= ADDR_MEMALIGN;
         }
     }
