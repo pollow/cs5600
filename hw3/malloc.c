@@ -33,6 +33,8 @@ typedef struct mem_arena {
     u8ptr_t mem_base;
     struct page_info* page_info_base;
     struct free_area free_area[MAX_ORDER + 1];
+    int high; // highest available blockorder
+    int current; // current max order
 } mem_arena;
 
 mem_arena mem_zone;
@@ -50,6 +52,15 @@ void *_memset(void* ptr, int c, size_t len) {
         *p++ = (unsigned char)c;
     }
     return ptr;
+}
+
+void _update_high() {
+    while (mem_zone.free_area[mem_zone.high].count == 0) {
+        mem_zone.high--;
+        if (mem_zone.high == -1) {
+            break;
+        }
+    }
 }
 
 void _validate() {
@@ -78,16 +89,16 @@ void init() {
     PAGE_SIZE = sysconf(_SC_PAGESIZE);
     BLOCK_SIZE = PAGE_SIZE;
     char buf[1024];
-    void *cur = sbrk(0);
-    mem_zone.mem_base = sbrk(BLOCK_SIZE << MAX_ORDER);
-    mem_zone.free_area[MAX_ORDER].ptr = (page_info *)cur;
+    void *cur = sbrk(BLOCK_SIZE);
+    mem_zone.mem_base = cur;// sbrk(BLOCK_SIZE << MAX_ORDER);
+    mem_zone.high = -1;
+    mem_zone.current = 0;
+    mem_zone.free_area[0].ptr = cur;
+    mem_zone.free_area[0].count = 1;
+    _memset(cur, 0, sizeof(page_info));
 
     snprintf(buf, 1024, "User space memory %p:%p\n", cur, sbrk(0));
     write(STDOUT_FILENO, buf, strlen(buf));
-
-    _memset(cur, 0, sizeof(page_info));
-    mem_zone.free_area[MAX_ORDER].count = 1;
-    mem_zone.free_area[MAX_ORDER].ptr->order= MAX_ORDER;
 
     // initalize mutex
     int rtn = pthread_mutex_init(&malloc_lock, NULL);
@@ -120,6 +131,10 @@ void _unlink(page_info *pi) {
         pi->next->prev = pi->prev;
     }
     mem_zone.free_area[pi->order].count--;
+    if (pi->order == mem_zone.high &&
+        mem_zone.free_area[pi->order].count == 0) {
+        _update_high();
+    }
     // struct free_area *fa = &mem_zone.free_area[pi->order];
     // if (fa->count != 0 && fa->ptr == NULL) {
     //     write(1, "WTF???\n", 7);
@@ -127,6 +142,9 @@ void _unlink(page_info *pi) {
 }
 
 void _insert(page_info *left) {
+    if (left->order > mem_zone.high) {
+        mem_zone.high = left->order;
+    }
     free_area *fa = &mem_zone.free_area[left->order];
     left->prev = NULL;
     left->next = fa->ptr;
@@ -163,8 +181,28 @@ void _split(size_t order) {
         _insert(left);
         assert(mem_zone.free_area[left->order].count == tmp + 2);
         assert(mem_zone.free_area[left->order].ptr == left);
-
     }
+}
+
+// Increasing heap until the target order reached
+void *_alloc_arena(int order) {
+    void *cur = NULL;
+    do {
+        cur = sbrk(BLOCK_SIZE << mem_zone.current);
+        if (cur != (void *)-1) {
+            page_info *pi = (page_info *)cur;
+            pi->order = mem_zone.current;
+            _insert(pi);
+        } else
+            write(1, "WTF??\n", 6);
+        mem_zone.current++;
+    } while (order >= mem_zone.current);
+    char buf[1024];
+    snprintf(buf, 1024, "%s:%d sbrk(0) = %lx, max order: %d\n",
+             __FILE__, __LINE__, sbrk(0), mem_zone.current);
+    write(STDOUT_FILENO, buf, strlen(buf));
+
+    return cur;
 }
 
 void *malloc(size_t size) {
@@ -176,6 +214,10 @@ void *malloc(size_t size) {
     int order = __builtin_ctz(alloc_size) - 12; // 0x1000 -> order 0
     page_info *rtnptr = NULL;
     free_area *fa = &mem_zone.free_area[order];
+
+    if (order > mem_zone.high) {
+        _alloc_arena(order);
+    }
 
     if (!fa->count) {
         _split(order+1);

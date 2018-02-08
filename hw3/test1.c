@@ -11,10 +11,10 @@ int main(int argc, char **argv)
   printf("memalign: %p\n", t);
   free(t);
   for(int k = 0; k < 10; k++) {
-      for (int i = 0; i < 51; i++) {
+      for (int i = 0; i < 512; i++) {
           p[i] = malloc(size);
       }
-      for (int i = 0; i < 51; i++) {
+      for (int i = 0; i < 512; i++) {
           free(p[i]);
       }
   }

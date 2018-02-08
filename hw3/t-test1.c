@@ -275,7 +275,6 @@ static void bin_alloc(struct bin *m, size_t size, unsigned r)
 	}
 #endif
 	r %= 1024;
-
 	if (r < 4)
 	{
 		/* memalign */
