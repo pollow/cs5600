@@ -1,8 +1,8 @@
 #Sample Makefile for Malloc
 CC=gcc
-CFLAGS=-g -O0 -fPIC -Wall
+CFLAGS=-g -O0 -fPIC -Wall -std=gnu11
 
-TESTS=t-test1 test1
+TESTS=t-test1 test1 tt
 HEADERS= malloc.h #Add list of header files
 
 all:	${TESTS} libmalloc.so
