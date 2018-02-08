@@ -2,16 +2,16 @@
 CC=gcc
 CFLAGS=-g -O0 -fPIC -Wall -std=gnu11
 
-TESTS=t-test1 test1 tt
-HEADERS= malloc.h #Add list of header files
+TESTS=t-test1 test1
+HEADERS= malloc.h malloc_utils.h
 
 all:	${TESTS} libmalloc.so
 
 clean:
-	rm -rf *.o *.so ${TESTS}
+	rm -rf *.o *.so ${TESTS} tt
 
-libmalloc.so: malloc.o #add other sources here
-	$(CC) $(CFLAGS) -shared -Wl,--unresolved-symbols=ignore-all $< -o $@
+libmalloc.so: malloc_utils.o malloc.o free.o realloc.o calloc.o memalign.o
+	$(CC) $(CFLAGS) -shared -Wl,--unresolved-symbols=ignore-all $? -o $@
 
 %: %.c
 	$(CC) $(CFLAGS) $< -o $@ -lpthread
