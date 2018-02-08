@@ -30,7 +30,7 @@ The meta data for a memory region allocated to use is recorded right before the 
 
 Meta data include, the size of this memory region, flags regard the properties of this memory region, and when it is used as a free node, it's sublings.
 
-The system maintains a free list collecting all free nodes with same order.
+The system maintains a set of free list collecting all free nodes with same order.
 
 A special case is `memalign`, since `memalign` ask for alignment, it might skip the head of an allocated area to align to a given number. The memory structure looks like:
 
@@ -45,7 +45,6 @@ We can tell whether a address is aligned by examing the flag in it's meta data, 
 #### Arena Management
 
 The system maintains only one arena, and double the size everytime we run out of local memory. This help maintains the number of blocks to be power of 2.
-
 
 ## Usage
 
