@@ -8,7 +8,7 @@ HEADERS= malloc.h malloc_utils.h
 all:	${TESTS} libmalloc.so
 
 clean:
-	rm -rf *.o *.so ${TESTS} tt
+	rm -rf *.o *.so ${TESTS}
 
 libmalloc.so: malloc_utils.o malloc.o free.o realloc.o calloc.o memalign.o
 	$(CC) $(CFLAGS) -shared -Wl,--unresolved-symbols=ignore-all $? -o $@
@@ -28,6 +28,3 @@ check:	libmalloc.so ${TESTS}
 
 dist: clean
 	dir=`basename $$PWD`; cd ..; tar cvf $$dir.tar ./$$dir; gzip $$dir.tar
-
-tt: t-test1.c malloc.c
-	$(CC) t-test1.c malloc.c $(CFLAGS) -lpthread -o tt

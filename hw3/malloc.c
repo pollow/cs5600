@@ -12,10 +12,10 @@
 #include "malloc.h"
 
 void *malloc(size_t size) {
-    pthread_mutex_lock(&malloc_lock);
     if (size == 0) {
         return NULL;
     }
+    pthread_mutex_lock(&malloc_lock);
     size_t alloc_size = _round(size + sizeof(page_info));
     int order = __builtin_ctz(alloc_size) - 12; // 0x1000 -> order 0
     page_info *rtnptr = NULL;
@@ -31,6 +31,7 @@ void *malloc(size_t size) {
 
     if (!fa->count) {
         errno = ENOMEM;
+        pthread_mutex_unlock(&malloc_lock);
         return NULL;
     } else {
         if (fa->ptr == NULL) {

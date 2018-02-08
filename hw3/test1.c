@@ -1,6 +1,8 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
+
 #include "malloc.h"
 
 int main(int argc, char **argv)
@@ -9,7 +11,7 @@ int main(int argc, char **argv)
   void *p[512];
   void *t = memalign(0x20000, 0x500);
   printf("memalign: %p\n", t);
-  free(t);
+  // free(t);
   for(int k = 0; k < 10; k++) {
       for (int i = 0; i < 512; i++) {
           p[i] = malloc(size);
