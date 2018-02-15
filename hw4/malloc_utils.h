@@ -49,10 +49,11 @@ void *_alloc_arena(int order);
 void _try_merge(page_info *pi);
 void _merge_buddy(page_info *left, page_info *right);
 page_info *_get_buddy(u8ptr_t pi, size_t order);
+void initialize_arena();
 
-extern pthread_mutex_t malloc_lock;
 extern size_t PAGE_SIZE;
 extern size_t BLOCK_SIZE;
-extern mem_arena mem_zone;
+extern mem_arena *mem_zone_base;
+extern __thread mem_arena *arena;
 
 #endif

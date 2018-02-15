@@ -6,7 +6,7 @@
 void free(void *ptr) {
     if (ptr == NULL)
         return;
-    pthread_mutex_lock(&malloc_lock);
+    pthread_mutex_lock(&arena->lock);
 
     page_info *pi = GET_INFO(ptr);
 
@@ -23,5 +23,5 @@ void free(void *ptr) {
     #ifdef DEBUG
     _validate();
     #endif
-    pthread_mutex_unlock(&malloc_lock);
+    pthread_mutex_unlock(&arena->lock);
 }

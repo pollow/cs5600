@@ -15,13 +15,16 @@ void *malloc(size_t size) {
     if (size == 0) {
         return NULL;
     }
-    pthread_mutex_lock(&malloc_lock);
+    if (arena == NULL) {
+        initialize_arena();
+    }
+    pthread_mutex_lock(&arena->lock);
     size_t alloc_size = _round(size + sizeof(page_info));
     int order = __builtin_ctz(alloc_size) - 12; // 0x1000 -> order 0
     page_info *rtnptr = NULL;
-    free_area *fa = &mem_zone.free_area[order];
+    free_area *fa = &arena->free_area[order];
 
-    if (order > mem_zone.high) {
+    if (order > arena->high) {
         _alloc_arena(order);
     }
 
@@ -31,7 +34,7 @@ void *malloc(size_t size) {
 
     if (!fa->count) {
         errno = ENOMEM;
-        pthread_mutex_unlock(&malloc_lock);
+        pthread_mutex_unlock(&arena->lock);
         return NULL;
     } else {
         if (fa->ptr == NULL) {
@@ -48,6 +51,6 @@ void *malloc(size_t size) {
     #ifdef DEBUG
     _validate();
     #endif
-    pthread_mutex_unlock(&malloc_lock);
+    pthread_mutex_unlock(&arena->lock);
     return rtn;
 }
