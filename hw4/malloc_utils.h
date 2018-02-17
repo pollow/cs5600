@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <pthread.h>
 
-#define MAX_ORDER 16
+#define MAX_ORDER 26
 #define HEAD_OFFSET sizeof(page_info)
 
 // Address status mask
@@ -28,6 +28,11 @@ typedef struct mem_arena {
     struct free_area free_area[MAX_ORDER + 1];
     int high; // highest available blockorder
     int current; // current max order
+
+    // stats information
+    size_t used; // used block
+    size_t malloc;
+    size_t free;
 } mem_arena;
 
 typedef struct page_info {
@@ -50,10 +55,12 @@ void _try_merge(page_info *pi);
 void _merge_buddy(page_info *left, page_info *right);
 page_info *_get_buddy(u8ptr_t pi, size_t order);
 void initialize_arena();
+void malloc_stats();
 
 extern size_t PAGE_SIZE;
 extern size_t BLOCK_SIZE;
 extern mem_arena *mem_zone_base;
 extern __thread mem_arena *arena;
+extern size_t num_cores;
 
 #endif

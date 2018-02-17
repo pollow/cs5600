@@ -2,7 +2,7 @@
 CC=gcc
 CFLAGS=-g -O0 -fPIC -Wall -std=gnu11
 
-TESTS=t-test1 test1
+TESTS=t-test1 test1 test2
 HEADERS= malloc.h malloc_utils.h
 
 all: ${TESTS} libmalloc.so
@@ -10,7 +10,7 @@ all: ${TESTS} libmalloc.so
 clean:
 	rm -rf *.o *.so ${TESTS}
 
-libmalloc.so: malloc_utils.o malloc.o free.o realloc.o calloc.o memalign.o
+libmalloc.so: malloc_utils.o malloc.o free.o realloc.o calloc.o memalign.o malloc_stats.o
 	$(CC) $(CFLAGS) -shared -Wl,--unresolved-symbols=ignore-all $^ -o $@ -lpthread
 
 %: %.c
@@ -25,6 +25,9 @@ check1:	libmalloc.so test1 t-test1
 
 check:	libmalloc.so ${TESTS}
 	LD_PRELOAD=`pwd`/libmalloc.so ./test1
+
+check2:	libmalloc.so test2
+	LD_PRELOAD=`pwd`/libmalloc.so ./test2
 
 tt: libmalloc.so test1
 

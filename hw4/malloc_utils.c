@@ -23,6 +23,7 @@ __thread mem_arena *arena = NULL;
 u8ptr_t arena_cur_base = (u8ptr_t) 0x10000000000;
 size_t arena_offset = 0x1000000000;
 pthread_mutex_t arena_lock;
+size_t num_cores = 0;
 
 void *_memset(void* ptr, int c, size_t len) {
     u8ptr_t p = (u8ptr_t)ptr;
@@ -42,7 +43,7 @@ void _update_high() {
 }
 
 void _validate() {
-    for (int i = 0; i < MAX_ORDER; i++) {
+    for (int i = 0; i < arena->current; i++) {
         free_area *fa = &arena->free_area[i];
         int len = 0;
         page_info *pi = fa->ptr;
@@ -105,7 +106,7 @@ void _insert(page_info *left) {
 void _split(size_t order) {
     free_area *fa = &arena->free_area[order];
 
-    if (order > MAX_ORDER) {
+    if (order > MAX_ORDER || order > arena->current) {
         return;
     }
 
@@ -161,7 +162,7 @@ page_info *_get_buddy(u8ptr_t pi, size_t order) {
 void _try_merge(page_info *pi) {
     page_info *buddy = _get_buddy((u8ptr_t)pi, pi->order);
 
-    if (pi->order != MAX_ORDER &&
+    if (pi->order != arena->current &&
         buddy->order == pi->order &&
         (buddy->flags & ADDR_ALLOCATED) == 0) {
         // same order, buddy not allocated, merge
@@ -174,6 +175,17 @@ void _try_merge(page_info *pi) {
     }
 }
 
+void fork_hold() {
+    for (int i = 0; i < num_cores; i++) {
+        pthread_mutex_lock(&mem_zone_base[i].lock);
+    }
+}
+
+void fork_release() {
+    for (int i = 0; i < num_cores; i++) {
+        pthread_mutex_unlock(&mem_zone_base[i].lock);
+    }
+}
 
 __attribute__ ((constructor))
 void init() {
@@ -186,18 +198,24 @@ void init() {
         write(STDOUT_FILENO, info, strlen(info));
         exit(0);
     }
+    rtn = pthread_atfork(fork_hold, fork_release, fork_release);
+    if (rtn) {
+        const char* info = "Cannot bind pthread_atfork.\n";
+        write(STDOUT_FILENO, info, strlen(info));
+        exit(0);
+    }
 }
 
 void initialize_arena() {
     char *info = "initialize_arena\n";
-    write(1, info, strlen(info));
+    // write(1, info, strlen(info));
     pthread_mutex_lock(&arena_lock);
     if (mem_zone_base == NULL) {
 
         char *info = "init arena metadata\n";
-        write(1, info, strlen(info));
+        // write(1, info, strlen(info));
         // initialize arena metadata
-        size_t num_cores = sysconf( _SC_NPROCESSORS_ONLN );
+        num_cores = sysconf( _SC_NPROCESSORS_ONLN );
         size_t size = sizeof(mem_arena) * num_cores;
         mem_zone_base = (mem_arena *)sbrk(size);
         _memset(mem_zone_base, 0, size);
@@ -212,12 +230,12 @@ void initialize_arena() {
         if (CPU_ISSET(i, &cpuset)) {
             char buf[10];
             snprintf(buf, 10, "%d\n", i);
-            write(1, buf, strlen(buf));
+            // write(1, buf, strlen(buf));
             arena = mem_zone_base + i;
             if (arena->mem_base == NULL) {
                 // initialize arena region
                 char *info = "mmap new thread arena\n";
-                write(1, info, strlen(info));
+                // write(1, info, strlen(info));
                 u8ptr_t cur = mmap(arena_cur_base, BLOCK_SIZE,
                                    PROT_READ | PROT_WRITE,
                                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
@@ -227,7 +245,7 @@ void initialize_arena() {
                     write(STDOUT_FILENO, info, strlen(info));
                     exit(0);
                 }
-                arena->mem_base = cur;// sbrk(BLOCK_SIZE << MAX_ORDER);
+                arena->mem_base = cur;
                 arena->high = -1;
                 arena->current = 0;
                 arena->free_area[0].ptr = (page_info *)cur;

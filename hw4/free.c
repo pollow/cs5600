@@ -18,10 +18,15 @@ void free(void *ptr) {
     }
 
     _insert(pi);
+    // statistic data
+    arena->free++;
+    arena->used -= BLOCK_SIZE << pi->order;
+
     pi->flags = 0;
     _try_merge(pi);
     #ifdef DEBUG
     _validate();
     #endif
+
     pthread_mutex_unlock(&arena->lock);
 }

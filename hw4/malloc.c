@@ -51,6 +51,11 @@ void *malloc(size_t size) {
     #ifdef DEBUG
     _validate();
     #endif
+
+    // statistic
+    arena->malloc++;
+    arena->used += alloc_size;
+
     pthread_mutex_unlock(&arena->lock);
     return rtn;
 }

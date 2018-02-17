@@ -9,7 +9,7 @@
  */
 
 #define USE_PTHREADS	1
-#define USE_MALLOC	0
+#define USE_MALLOC	1
 #define USE_SPROC	0
 #define USE_THR		0
 
@@ -644,7 +644,8 @@ int main(int argc, char *argv[])
 	}
 	free(st);
 #if USE_MALLOC
-	// malloc_stats();
+  printf("???\n");
+	malloc_stats();
 #endif
 	printf("Done.\n");
 	return 0;

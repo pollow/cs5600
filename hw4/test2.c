@@ -18,40 +18,47 @@ void *malloc_test(int id) {
     CPU_SET(id % num_cores, &cpuset);
     pthread_setaffinity_np(self, sizeof(cpu_set_t), &cpuset);
 
-    size_t size = 12;
-    void *p[512];
-    void *t = memalign(0x20000, 0x500);
-    printf("memalign: %p\n", t);
-    free(t);
-    for(int k = 0; k < 10; k++) {
-        for (int i = 0; i < 512; i++) {
-            p[i] = malloc(size);
-        }
-        for (int i = 0; i < 512; i++) {
-            free(p[i]);
-        }
+    while (1) {
+        void *t = malloc(1024);
+        free(t);
     }
     return NULL;
 }
 
-int main(int argc, char **argv)
-{
+void fork_test(void *args) {
+    system("sleep 0.01");
+    pid_t pid = fork();
+    if (pid == 0) {
+        // child process
+        write(1, "???\n", 4);
+        malloc(1024);
+        write(1, "hhh\n", 4);
+    } else {
+        // parrent process
+        return;
+    }
+}
+
+int main() {
     pthread_t thid[4];
     void *ret;
-    for (int i = 0; i < 2; i++) {
+    if (pthread_create(&thid[0], NULL, fork_test, NULL) != 0) {
+        perror("pthread_create() fork_test error");
+        exit(1);
+    }
+    for (int i = 1; i < 4; i++) {
         if (pthread_create(&thid[i], NULL, malloc_test, i) != 0) {
             perror("pthread_create() error");
             exit(1);
         }
     }
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 4; i++) {
         if (pthread_join(thid[i], &ret) != 0) {
             perror("pthread_create() error");
             exit(3);
         }
     }
-
     malloc_stats();
     return 0;
 }
