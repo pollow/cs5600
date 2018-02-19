@@ -38,14 +38,14 @@ int main(int argc, char **argv)
 {
     pthread_t thid[4];
     void *ret;
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 4; i++) {
         if (pthread_create(&thid[i], NULL, malloc_test, i) != 0) {
             perror("pthread_create() error");
             exit(1);
         }
     }
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 4; i++) {
         if (pthread_join(thid[i], &ret) != 0) {
             perror("pthread_create() error");
             exit(3);

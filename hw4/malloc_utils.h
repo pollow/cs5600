@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <pthread.h>
 
-#define MAX_ORDER 26
+#define MAX_ORDER 20
 #define HEAD_OFFSET sizeof(page_info)
 
 // Address status mask
