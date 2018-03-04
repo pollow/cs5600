@@ -29,8 +29,9 @@ int main() {
     int M2 = 2 << 20;
     int s = 4;
 
-    for (int cap = 1 << 19; cap <= (8 << 22); cap *= 2) {
-        for(int s = 4; s <= cap / 4; s *= 2) {
+    // start from 32KB
+    for (int cap = 32 << 10; cap <= (8 << 22); cap *= 2) {
+        for(int s = 2; s < cap / sizeof(int); s *= 2) {
             int *p = (int *)malloc(cap);
             long sum = 0;
             for (int i = 0; i < cap / sizeof(int); i+=s) {
