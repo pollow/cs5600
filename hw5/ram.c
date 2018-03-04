@@ -37,7 +37,7 @@ int main() {
         float delta = time_spent - prev_time;
         if (i > 1 && delta > 3 * avg_delta) {
             printf("GOTCHA! Total available RAM size is %dMB\n", i);
-            return;
+            return 1;
         }
         sum_delta += delta;
         avg_delta = sum_delta / i;
